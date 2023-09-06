@@ -96,6 +96,46 @@ def fetch_gyr_measurement(bus):
 
     return v
 
+def whaba(bus):
+
+    # two vectors should be enough data to build a rotation matrix
+    # we don't need weights because we assume each measurement
+    # is weighted the same. There should be no variance.
+
+    # wait a bit to allow us to get the rocket x measurement (physically rotate rocket)
+    # TODO: blink status LEDs
+    time.sleep(10)
+
+    # fetch measured x vector (col vector 3x1)
+    roc_vec_x = np.array(fetch_acc_measurement(bus))[np.newaxis].T
+
+    # wait a bit to allow us to get the rocket z measurement (physically rotate rocket)
+    # TODO: blink status LEDs
+    time.sleep(10)
+
+    # fetch measured z vector (col vector 3x1)
+    roc_vec_z = np.array(fetch_acc_measurement(bus))[np.newaxis].T
+
+    # reference vector in x direction (col vector 3x1)
+    ref_vec_x = np.array([-1, 0, 0])[np.newaxis].T
+
+    # reference vector in z direction (-9.8 m/s2 downwards) (col vector 3x1)
+    ref_vec_z = np.array([0, 0, -1])[np.newaxis].T
+
+    # find B matrix
+    B = np.matmul(ref_vec_x, roc_vec_x.T) + np.matmul(ref_vec_z, roc_vec_z.T)
+
+    # numpy svd computes X = PDQ so Q is already transposed (in our case V is already transposed)
+    U, D, V = np.linalg.svd(B)
+
+    # find M matrix with weird determinant rules (so we don't have a det of 0)
+    M = np.diag([1, 1, np.linalg.det(U) * np.linalg.det(V.T)])
+
+    # the rotation matrix output
+    R = np.matmul(np.matmul(U, M), V)
+    
+    return R
+
 if __name__ == "__main__":
 
     # init status LED gpio
@@ -134,8 +174,10 @@ if __name__ == "__main__":
     
     # give the IMU some time to settle before pulling data
     time.sleep(5)
-    print("starting...")
 
+    # TODO: perform calibration manuever here
+
+    print("starting...")
     start_time = time.time()
 
     while True:
@@ -156,4 +198,4 @@ if __name__ == "__main__":
         time.sleep(0.02)
     
     print("saving timeseries...")
-    np.save('imu.npy', np.asarray(timeseries))
+    np.save('rocket.npy', np.asarray(timeseries))
